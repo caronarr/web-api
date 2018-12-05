@@ -2,9 +2,10 @@ from os import environ, path, pardir
 
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
+from flask_migrate import Migrate, MigrateCommand
 from flask_restful import Api, fields, reqparse
-from datetime import timezone, datetime
+from datetime import datetime
+from flask_script import Manager
 
 from rest_crud import add_collection
 
@@ -15,9 +16,13 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = environ.get('DATABASE_URL') or \
         'sqlite:///' + path.join(basedir, 'caronar.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+manager = Manager(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 api = Api(app)
+
+manager.add_command('db', MigrateCommand)
 
 
 # Models

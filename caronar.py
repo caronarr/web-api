@@ -3,8 +3,10 @@ from os import environ, path, pardir
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask_restful import Resource, Api
-from flask_marshmallow import Marshmallow
+from flask_restful import Api, fields, reqparse
+from datetime import timezone, datetime
+
+from rest_crud import add_collection
 
 basedir = path.abspath(path.join(__file__, pardir))
 
@@ -15,7 +17,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = environ.get('DATABASE_URL') or \
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-ma = Marshmallow(app)
+api = Api(app)
 
 
 # Models
@@ -25,10 +27,22 @@ class User(db.Model):
     name = db.Column(db.String(64))
     photo = db.Column(db.String(256))
 
+    @staticmethod
+    def json():
+        return {
+            'id': fields.Integer,
+            'name': fields.String,
+            'phone': fields.String,
+            'photo': fields.String
+        }
 
-class UserSchema(ma.Schema):
-    class Meta:
-        fields = ('id', 'name', 'phone', 'photo')
+    @staticmethod
+    def req_parser():
+        parser = reqparse.RequestParser()
+        parser.add_argument('name')
+        parser.add_argument('photo')
+        parser.add_argument('phone')
+        return parser
 
 
 class Location(db.Model):
@@ -37,11 +51,41 @@ class Location(db.Model):
     latitude = db.Column(db.Float, index=True)
     longitude = db.Column(db.Float, index=True)
 
+    @staticmethod
+    def json():
+        return {
+            'id': fields.Integer,
+            'name': fields.String,
+            'latitude': fields.Float,
+            'longitude': fields.Float
+        }
 
-class LocationSchema(ma.Schema):
-    class Meta:
-        fields = ('name', 'latitude', 'longitude')
+    @staticmethod
+    def req_parser():
+        parser = reqparse.RequestParser()
+        parser.add_argument('name')
+        parser.add_argument('latitude')
+        parser.add_argument('longitude')
+        return parser
 
+
+def location(value):
+    try:
+        x = Location.query.get(value['id']) if 'id' in value else Location(**value)
+    except TypeError:
+        # Raise a ValueError, and maybe give it a good error string
+        raise ValueError("Invalid location")
+
+    return x
+
+
+def date_time(value):
+    try:
+        from dateutil import parser as date_parser
+        dt = date_parser.parse(value)
+    except TypeError:
+        raise ValueError("Invalid date time")
+    return dt
 
 class DriverOffer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -54,10 +98,27 @@ class DriverOffer(db.Model):
     destination = db.relationship("Location", foreign_keys=[destination_id])
     requested_tip = db.Column(db.Float)
 
+    @staticmethod
+    def json():
+        return {
+            'id': fields.Integer,
+            'driver': fields.Nested(User.json()),
+            'origin': fields.Nested(Location.json()),
+            'destination': fields.Nested(Location.json()),
+            'scheduled_time': fields.DateTime,
+            'requested_tip': fields.Float
+        }
 
-class DriverOfferSchema(ma.Schema):
-    class Meta:
-        fields = ('id', 'driver', 'scheduled_time', 'origin', 'destination', 'requested_tip')
+    @staticmethod
+    def req_parser():
+
+        parser = reqparse.RequestParser()
+        parser.add_argument('driver_id', required=True)
+        parser.add_argument('origin', type=location, required=True)
+        parser.add_argument('destination', type=location, required=True)
+        parser.add_argument('scheduled_time', type=date_time, required=True)
+        parser.add_argument('requested_tip')
+        return parser
 
 
 class RiderOffer(db.Model):
@@ -71,10 +132,26 @@ class RiderOffer(db.Model):
     destination = db.relationship("Location", foreign_keys=[destination_id])
     offered_tip = db.Column(db.Float)
 
+    @staticmethod
+    def json():
+        return {
+            'id': fields.Integer,
+            'rider': fields.Nested(User.json()),
+            'origin': fields.Nested(Location.json()),
+            'destination': fields.Nested(Location.json()),
+            'scheduled_time': fields.DateTime,
+            'offered_tip': fields.Float
+        }
 
-class RiderOfferSchema(ma.Schema):
-    class Meta:
-        fields = ('id', 'rider', 'scheduled_time', 'origin', 'destination', 'offered_tip')
+    @staticmethod
+    def req_parser():
+        parser = reqparse.RequestParser()
+        parser.add_argument('rider_id', required=True)
+        parser.add_argument('origin', type=location, required=True)
+        parser.add_argument('destination', type=location, required=True)
+        parser.add_argument('scheduled_time', type=date_time, required=True)
+        parser.add_argument('offered_tip')
+        return parser
 
 
 class Deal(db.Model):
@@ -85,18 +162,20 @@ class Deal(db.Model):
     rider_offer = db.relationship("RiderOffer")
     agreed_tip = db.Column(db.Float)
 
+    def json(self):
+        return {
+            'id': self.id,
+            'driver_offer': self.driver_offer,
+            'rider_offer': self.rider_offer,
+            'agreed_tip': self.agreed_tip
+        }
 
-class DealSchema(ma.Schema):
-    class Meta:
-        fields = ('id', 'driver_offer', 'rider_offer', 'agreed_tip')
 
+# Routes
+add_collection(api, db, User)
+add_collection(api, db, Location)
+add_collection(api, db, DriverOffer)
+add_collection(api, db, RiderOffer)
 
-# Parsers
-user_schema = UserSchema()
-users_schema = UserSchema(many=True)
-location_schema = LocationSchema()
-locations_schema = LocationSchema(many=True)
-driver_offer_schema = DriverOfferSchema()
-driver_offers_schema = DriverOfferSchema(many=True)
-rider_offer_schema = RiderOfferSchema()
-rider_offers_schema = RiderOfferSchema(many=True)
+if __name__ == '__main__':
+    app.run(debug=True)

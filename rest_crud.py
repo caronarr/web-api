@@ -33,6 +33,7 @@ def add_collection(api, db, model):
             entry = model.query.get(model_id)
             abort_if_not_exist(entry)
             db.session.delete(entry)
+            db.session.commit()
             return '', 204
 
     class ManagedResourceList(Resource):

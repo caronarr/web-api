@@ -186,4 +186,5 @@ add_collection(api, db, RiderOffer)
 add_collection(api, db, Deal)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=environ['PORT'] or 5000)
+    port = int(environ.get('PORT', 5000))
+    app.run(debug=True, port=port)

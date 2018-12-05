@@ -69,24 +69,6 @@ class Location(db.Model):
         return parser
 
 
-def location(value):
-    try:
-        x = Location.query.get(value['id']) if 'id' in value else Location(**value)
-    except TypeError:
-        # Raise a ValueError, and maybe give it a good error string
-        raise ValueError("Invalid location")
-
-    return x
-
-
-def date_time(value):
-    try:
-        from dateutil import parser as date_parser
-        dt = date_parser.parse(value)
-    except TypeError:
-        raise ValueError("Invalid date time")
-    return dt
-
 class DriverOffer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     driver_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -113,10 +95,10 @@ class DriverOffer(db.Model):
     def req_parser():
 
         parser = reqparse.RequestParser()
-        parser.add_argument('driver_id', required=True)
-        parser.add_argument('origin', type=location, required=True)
-        parser.add_argument('destination', type=location, required=True)
-        parser.add_argument('scheduled_time', type=date_time, required=True)
+        parser.add_argument('driver', type=model_parser(User, require_created=True), required=True)
+        parser.add_argument('origin', type=model_parser(Location), required=True)
+        parser.add_argument('destination', type=model_parser(Location), required=True)
+        parser.add_argument('scheduled_time', type=datetime, required=True)
         parser.add_argument('requested_tip')
         return parser
 
@@ -146,10 +128,10 @@ class RiderOffer(db.Model):
     @staticmethod
     def req_parser():
         parser = reqparse.RequestParser()
-        parser.add_argument('rider_id', required=True)
-        parser.add_argument('origin', type=location, required=True)
-        parser.add_argument('destination', type=location, required=True)
-        parser.add_argument('scheduled_time', type=date_time, required=True)
+        parser.add_argument('rider', type=model_parser(User, require_created=True), required=True)
+        parser.add_argument('origin', type=model_parser(Location), required=True)
+        parser.add_argument('destination', type=model_parser(Location), required=True)
+        parser.add_argument('scheduled_time', type=datetime, required=True)
         parser.add_argument('offered_tip')
         return parser
 
@@ -162,13 +144,38 @@ class Deal(db.Model):
     rider_offer = db.relationship("RiderOffer")
     agreed_tip = db.Column(db.Float)
 
-    def json(self):
+    @staticmethod
+    def json():
         return {
-            'id': self.id,
-            'driver_offer': self.driver_offer,
-            'rider_offer': self.rider_offer,
-            'agreed_tip': self.agreed_tip
+            'id': fields.Integer,
+            'driver_offer': fields.Nested(DriverOffer.json()),
+            'rider_offer': fields.Nested(RiderOffer.json()),
+            'agreed_tip': fields.Float
         }
+
+    @staticmethod
+    def req_parser():
+        parser = reqparse.RequestParser()
+        parser.add_argument('driver_offer', type=model_parser(DriverOffer, require_created=True))
+        parser.add_argument('rider_offer', type=model_parser(RiderOffer, require_created=True))
+        parser.add_argument('agreed_tip', type=float)
+        return parser
+
+
+# parsers
+def model_parser(model, require_created=False):
+    def p(value, name):
+        if require_created and 'id' not in value:
+            raise ValueError('{} value requires a valid id'.format(name))
+        try:
+            x = model.query.get(value['id']) if 'id' in value else model(**value)
+        except TypeError:
+            # Raise a ValueError, and maybe give it a good error string
+            raise ValueError("{}: Invalid {}".format(name, model.__name__))
+
+        return x
+
+    return p
 
 
 # Routes
@@ -176,6 +183,7 @@ add_collection(api, db, User)
 add_collection(api, db, Location)
 add_collection(api, db, DriverOffer)
 add_collection(api, db, RiderOffer)
+add_collection(api, db, Deal)
 
 if __name__ == '__main__':
     app.run(debug=True)

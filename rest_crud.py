@@ -1,6 +1,6 @@
 import re
 from flask_restful import Resource, abort, marshal_with, fields
-from sqlalchemy.exc import IntegrityError
+from flask import request
 
 
 def abort_if_not_exist(entry):
@@ -38,7 +38,14 @@ def add_collection(api, db, model):
 
         @marshal_with(model.json())
         def get(self):
-            all_models = model.query.all()
+            q = model.query
+            args = request.args
+            for k in args:
+                attr = getattr(model, k)
+                if attr is not None:
+                    q = q.filter(attr == args[k])
+                print('{}={}'.format(k, args[k]))
+            all_models = q.all()
             return all_models
 
         def post(self):

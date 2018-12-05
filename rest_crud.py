@@ -1,6 +1,7 @@
 import re
-from flask_restful import Resource, abort, marshal_with, fields
+from flask_restful import Resource, abort, marshal_with
 from flask import request
+from sqlalchemy.exc import IntegrityError
 
 
 def abort_if_not_exist(entry):
@@ -52,12 +53,12 @@ def add_collection(api, db, model):
             args = parser.parse_args()
             entry = model(**args)
             db.session.add(entry)
-            # try:
-            db.session.commit()
-            return '', 302, {'Location': '/{}/{}'.format(collection_name, entry.id)}
-            # except IntegrityError:
-            #     # TODO: Respond with something more meaningful
-            #     return 'Bad arguments', 400
+            try:
+                db.session.commit()
+                return '', 302, {'Location': '/{}/{}'.format(collection_name, entry.id)}
+            except IntegrityError:
+                # TODO: Respond with something more meaningful
+                return 'Bad arguments', 400
 
     api.add_resource(ManagedResourceList, '/{}'.format(collection_name), endpoint=endpoint_list)
     api.add_resource(ManagedResource, '/{}/<model_id>'.format(collection_name), endpoint=endpoint_item)
